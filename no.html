@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: sans-serif; }
+        .node { fill: #3498db; stroke: #fff; stroke-width: 1.5px; }
+        .visible { stroke: #ccc; stroke-opacity: 0.6; }
+        .hide { stroke: #ccc; stroke-opacity: 0.0; }
+    </style>
+</head>
+<body>
+    <svg width="2000" height="1200"></svg>
+    <script>
+        d3.json("graph.json").then(function(graph) {
+            const width = 1000, height = 1200;
+
+            const svg = d3.select("svg"),
+                  linkScale = d3.scaleLinear().domain([0, 1]).range([1, 5]);
+
+const simulation = d3.forceSimulation(graph.nodes)
+    .force("link", d3.forceLink(graph.links).id(d => d.id).distance(d => 400 * (1 - d.value)))  // Spread nodes more
+    .force("charge", d3.forceManyBody().strength(-700))  // Push nodes apart
+    .force("collision", d3.forceCollide().radius(20))  // Prevent overlapping
+    .force("center", d3.forceCenter(width / 2, height / 2));
+
+const node = svg.append("g")
+    .selectAll("circle")
+    .data(graph.nodes)
+    .enter().append("circle")
+    .attr("class", "node")
+    .attr("r", 8)
+    .append("title")  // Show label on hover
+    .text(d => d.id);
+
+            const link = svg.append("g")
+                .selectAll("line")
+                .data(graph.links)
+                .enter().append("line")
+                .attr("class", "link")
+                .attr("class", d=> (d.value<0.2)?"visible":"hide")
+                .attr("stroke-width", d => linkScale(d.value));
+
+            const node = svg.append("g")
+                .selectAll("circle")
+                .data(graph.nodes)
+                .enter().append("circle")
+                .attr("class", "node")
+                .attr("r", 8)
+                .call(d3.drag()
+                    .on("start", dragStarted)
+                    .on("drag", dragged)
+                    .on("end", dragEnded));
+
+            const text = svg.append("g")
+                .selectAll("text")
+                .data(graph.nodes)
+                .enter().append("text")
+                .text(d => d.id)
+                .attr("x", 10)
+                .attr("y", 3);
+
+            simulation.on("tick", () => {
+                link.attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node.attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+
+                text.attr("x", d => d.x + 10)
+                    .attr("y", d => d.y + 3);
+            });
+
+            function dragStarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragEnded(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+const zoom = d3.zoom()
+  .scaleExtent([0.1, 10])
+  .on("zoom", (event) => {
+    svg.attr("transform", event.transform);
+  });
+
+svg.call(zoom);
+        });
+    </script>
+</body>
+</html>

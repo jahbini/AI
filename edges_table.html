@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edges Table</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; cursor: pointer; }
+        th:hover { background-color: #ddd; }
+        .sortable::after { content: " ⬍"; font-size: 0.8em; color: gray; }
+    </style>
+</head>
+<body>
+
+    <h2>Node Connections</h2>
+    <table>
+        <thead>
+            <tr>
+                <th class="sortable" onclick="sortTable(0)">Source</th>
+                <th>Target</th>
+                <th class="sortable" onclick="sortTable(2)">Length</th>
+            </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+    </table>
+
+    <script>
+        d3.json("graph.json").then(function(graph) {
+            const tableBody = d3.select("#table-body");
+            graph.links.forEach(link => {
+                tableBody.append("tr")
+                    .html(`<td>${link.source}</td><td>${link.target}</td><td>${link.value.toFixed(4)}</td>`);
+            });
+        });
+
+        function sortTable(colIndex) {
+            const table = document.querySelector("table tbody");
+            let rows = Array.from(table.rows);
+            let isNumeric = colIndex === 2; // Length column is numeric
+
+            rows.sort((rowA, rowB) => {
+                let valA = rowA.cells[colIndex].innerText;
+                let valB = rowB.cells[colIndex].innerText;
+                return isNumeric ? valA - valB : valA.localeCompare(valB);
+            });
+
+            table.innerHTML = "";
+            rows.forEach(row => table.appendChild(row));
+        }
+    </script>
+
+</body>
+</html>
