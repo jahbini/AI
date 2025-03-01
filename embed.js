@@ -1,41 +1,42 @@
-const fs = require("fs");
-const fetch = require("node-fetch");
+#!/usr/bin/env node
 
+const fs = require("fs");
+
+// Ollama API endpoint
 const OLLAMA_API = "http://localhost:11434/api/embeddings";
 
-// Read extracted.json
-const rawData = fs.readFileSync("extracted.json", "utf8");
-let data;
-try {
-    data = JSON.parse(rawData);
-} catch (err) {
-    console.error("Error: extracted.json is not valid JSON.", err);
-    process.exit(1);
-}
+// Read input from stdin
+let rawData = "";
+process.stdin.on("data", (chunk) => {
+    rawData += chunk;
+});
 
-// Process each entry
-async function processEmbeddings() {
+process.stdin.on("end", async () => {
+    const data = JSON.parse(rawData);
+    const embeddings = [];
+
     for (const item of data) {
-        const header = item.header.replace(/"/g, '\\"');
-        const text = item.text.replace(/"/g, '\\"');
+        const paragraph = item.text || ""; // Ensure text exists
+        const response = await fetch(OLLAMA_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "mistral", prompt: paragraph })
+        }).then((res) => res.json());
 
-        if (!text) continue; // Skip empty entries
-
-        try {
-            const response = await fetch.default(OLLAMA_API, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ model: "mistral", prompt: text }),
-            });
-
-            const json = await response.json();
-            const embedding = json.embedding.map(n => Math.round(n * 10000) / 10000);
-
-            console.log(JSON.stringify({ header, embedding }));
-        } catch (err) {
-            console.error("Error fetching embedding:", err);
+        // Ensure embedding exists
+        if (!response.embedding) {
+            console.error(`❌ Error: No embedding received for ${item.header}`);
+            continue;
         }
-    }
-}
 
-processEmbeddings();
+        // Preserve route & other fields
+        embeddings.push({
+            header: item.header,
+            embedding: response.embedding,
+            route: item.route || "" // Pass through route
+        });
+    }
+
+    // Output the updated embeddings.json
+    console.log(JSON.stringify(embeddings));
+});

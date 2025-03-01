@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+
+const fs = require("fs");
+
+// Read filenames from command line or default to stdin/stdout
+const embeddingsFile = process.argv[2] || "/dev/stdin";
+const anchorsFile = process.argv[3] || null;
+const outputFile = process.argv[4] || "/dev/stdout";
+
+// Load embeddings data
+const rawData = fs.readFileSync(embeddingsFile, "utf8");
+const data = JSON.parse(rawData);
+
+// Load anchors.json if provided
+let anchorsData = { anchors: [], outliers: [] };
+if (anchorsFile) {
+    try {
+        anchorsData = JSON.parse(fs.readFileSync(anchorsFile, "utf8"));
+    } catch (err) {
+        console.warn("Warning: Could not load anchors file. Anchors & outliers won't be highlighted.");
+    }
+}
+
+// Compute cosine similarity
+function cosineSimilarity(vecA, vecB) {
+    let dotProduct = 0.0, magA = 0.0, magB = 0.0;
+    for (let i = 0; i < vecA.length; i++) {
+        dotProduct += vecA[i] * vecB[i];
+        magA += vecA[i] * vecA[i];
+        magB += vecB[i] * vecB[i];
+    }
+    return dotProduct / (Math.sqrt(magA) * Math.sqrt(magB));
+}
+
+// Create edges based on similarity
+let edges = [];
+for (let i = 0; i < data.length; i++) {
+    for (let j = i + 1; j < data.length; j++) {
+        let similarity = cosineSimilarity(data[i].embedding, data[j].embedding);
+        edges.push({ route: data[i].route, source: data[i].header, target: data[j].header, weight: similarity });
+    }
+}
+
+// Inject anchor/outlier info into nodes
+for (let node of data) {
+    node.type = anchorsData.anchors.includes(node.header) ? "anchor" :
+                anchorsData.outliers.includes(node.header) ? "outlier" : "normal";
+}
+
+// Output result to file or stdout
+const output = JSON.stringify({ nodes: data, links: edges });
+if (outputFile === "/dev/stdout") {
+    console.log(output);
+} else {
+    fs.writeFileSync(outputFile, output);
+}

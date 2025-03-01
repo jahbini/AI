@@ -1,75 +1,80 @@
-#!/usr/bin/env python3
 import sys
 import json
-import networkx as nx
+import numpy as np
+from scipy.spatial.distance import pdist, squareform
 
-# Ensure the embeddings file is provided
-if len(sys.argv) < 2:
-    print("Usage: python3 find_anchors.py embeddings.json < graph.json", file=sys.stderr)
+DEBUG = False  # 🔴 Toggle debugging here (True = full debug, False = normal mode)
+
+# 🚀 Rule #1: Output Input
+raw_input = sys.stdin.read().strip()
+
+if DEBUG:
+    print("🔍 DEBUG: Raw Input (First 500 chars):\n", raw_input[:500], "\n")
+
+try:
+    data = json.loads(raw_input)
+except json.JSONDecodeError as e:
+    print(f"❌ Error: Invalid JSON input. {e}", file=sys.stderr)
     sys.exit(1)
 
-embeddings_file = sys.argv[1]
+if DEBUG:
+    print("✅ DEBUG: Successfully parsed JSON. Total items:", len(data))
 
-# ✅ Read JSONL file line by line (supports streaming format)
-embeddings = {}
-with open(embeddings_file, "r") as f:
-    for line in f:
-        try:
-            obj = json.loads(line)
-            embeddings[obj["header"]] = obj["embedding"]
-        except json.JSONDecodeError:
-            print(f"Error parsing line: {line}", file=sys.stderr)
+# 🚀 Rule #2: Instrument Processing Steps
 
-# ✅ Read graph data from stdin
-data = json.load(sys.stdin)
-G = nx.Graph()
+# Ensure JSON is a list
+if not isinstance(data, list):
+    print("❌ Error: JSON input is not a list of objects.", file=sys.stderr)
+    sys.exit(1)
 
-# Add edges to the graph
-for link in data["links"]:
-    G.add_edge(link["source"], link["target"], weight=link["value"])
+if len(data) == 0:
+    print("❌ Error: JSON input is empty.", file=sys.stderr)
+    sys.exit(1)
 
-# Find most connected nodes (anchors)
-node_strengths = {node: sum(d["weight"] for _, _, d in G.edges(node, data=True)) for node in G.nodes}
-sorted_anchors = sorted(node_strengths.items(), key=lambda x: x[1], reverse=True)
+if DEBUG:
+    print("🔍 DEBUG: First item structure:", json.dumps(data[0], indent=2))
 
-print("📌 **Anchor Headlines (Most Connected Nodes):**\n")
-for node, strength in sorted_anchors[:5]:  # Show top 5 anchors
-    print(f"🔹 {node} (Total Similarity: {strength:.2f})")
+# Extract embeddings and headers
+headers = [item.get("header", "UNKNOWN") for item in data]
+embeddings = np.array([item.get("embedding", []) for item in data])
 
-# Find least connected nodes (outliers)
-sorted_outliers = sorted(node_strengths.items(), key=lambda x: x[1])
+if DEBUG:
+    print("✅ DEBUG: First 5 headers:", headers[:5])
+    print("✅ DEBUG: Embedding shape:", embeddings.shape)
 
-print("\n🚨 **Outlier Paragraphs (Most Distant Nodes):**\n")
-for node, strength in sorted_outliers[:5]:  # Show top 5 outliers
-    print(f"⚠️ {node} (Total Similarity: {strength:.2f})")
+# Compute distances
+distance_matrix = squareform(pdist(embeddings, "cosine"))
 
+if DEBUG:
+    print("✅ DEBUG: Distance matrix shape:", distance_matrix.shape)
 
-# ✅ Fix: Ensure we fetch embeddings correctly
-def find_bridges(anchor, outlier):
-    if anchor not in embeddings or outlier not in embeddings:
-        return None  # If no embedding found, return None
+# 🚀 Rule #3: Validate Output Format by Re-Parsing It
 
-    anchor_vec = embeddings[anchor]
-    outlier_vec = embeddings[outlier]
+# Find the most central nodes (anchors)
+anchor_indices = np.argsort(distance_matrix.sum(axis=1))[:10]
+anchors = [headers[i] for i in anchor_indices]
 
-    # Ensure both embeddings exist and are valid
-    if not anchor_vec or not outlier_vec or len(anchor_vec) != len(outlier_vec):
-        return None
+# Find the most isolated nodes (outliers)
+outlier_indices = np.argsort(distance_matrix.sum(axis=1))[-10:]
+outliers = [headers[i] for i in outlier_indices]
 
-    # Compute midpoint vector
-    midpoint_vec = [(a + b) / 2 for a, b in zip(anchor_vec, outlier_vec)]
+output = {
+    "anchors": anchors,
+    "outliers": outliers,
+}
 
-    # Find the closest paragraph to this midpoint
-    closest_node = min(embeddings.keys(),
-                       key=lambda n: sum((x - y) ** 2 for x, y in zip(midpoint_vec, embeddings[n])) if embeddings[n] else float('inf'))
+# Validate the output can be re-parsed
+output_json = json.dumps(output, indent=2)
 
-    return closest_node
+try:
+    reloaded_output = json.loads(output_json)
+    if DEBUG:
+        print("✅ DEBUG: Successfully re-parsed output JSON.")
+except json.JSONDecodeError as e:
+    print(f"❌ Error: Generated output is not valid JSON. {e}", file=sys.stderr)
+    sys.exit(1)
 
+if DEBUG:
+    print("✅ DEBUG: Final Output JSON:", output_json)
 
-# Identify bridges for top outliers
-print("\n🛤 **Bridging Paragraphs (Between Anchors & Outliers):**\n")
-for anchor, _ in sorted_anchors[:3]:  # Check first 3 anchors
-    for outlier, _ in sorted_outliers[:3]:  # Check first 3 outliers
-        bridge = find_bridges(anchor, outlier)
-        if bridge:
-            print(f"🌉 {bridge} (Bridges 🔹 {anchor} ↔ ⚠️ {outlier})")
+print(output_json)  # ✅ Final output only if everything is valid
