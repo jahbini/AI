@@ -9,8 +9,8 @@
         body { font-family: Arial, sans-serif; margin: 0; overflow: hidden; }
         svg { width: 100vw; height: 100vh; }
         .node text { font-size: 12px; fill: white; }
-        .link { stroke: gray; stroke-opacity: 0.3; }
-        .highlight { stroke: red; stroke-width: 2px; }
+        .link { stroke: gray; stroke-opacity: 0; transition: stroke-opacity 0.3s; } /* Default to invisible */
+        .highlight { stroke: red; stroke-width: 2px; stroke-opacity: 1; }
         .anchor { fill: blue; }
         .outlier { fill: orange; }
         .label { font-size: 12px; fill: black; visibility: hidden; }
@@ -31,10 +31,8 @@
         d3.json("graph.json").then(graph => {
             console.log("✅ DEBUG: Loaded graph.json", graph);
 
-            // Ensure correct data mapping
-            graph.nodes.forEach(node => node.id = node.header);  // Map "header" to "id"
+            graph.nodes.forEach(node => node.id = node.header);
 
-            // Create simulation
             const simulation = d3.forceSimulation(graph.nodes)
                 .force("link", d3.forceLink(graph.links)
                     .id(d => d.id)
@@ -42,14 +40,11 @@
                 .force("charge", d3.forceManyBody().strength(-200))
                 .force("center", d3.forceCenter(width / 2, height / 2));
 
-            // Draw links
             const link = container.selectAll(".link")
                 .data(graph.links)
                 .enter().append("line")
-                .attr("class", "link")
-                .style("stroke-width", d => d.weight ? d.weight * 5 : 1);
+                .attr("class", "link");
 
-            // Draw nodes
             const node = container.selectAll(".node")
                 .data(graph.nodes)
                 .enter().append("circle")
@@ -58,7 +53,6 @@
                 .attr("fill", d => d.type === "anchor" ? "blue" : d.type === "outlier" ? "orange" : "gray")
                 .call(drag(simulation));
 
-            // Add labels (initially hidden)
             const labels = container.selectAll(".label")
                 .data(graph.nodes)
                 .enter().append("text")
@@ -67,16 +61,16 @@
                 .attr("dy", -10)
                 .text(d => d.id);
 
-            // Tooltip (Shows node name on hover)
             node.on("mouseover", function (event, d) {
                 d3.select(this).attr("stroke", "black").attr("stroke-width", 2);
                 labels.filter(label => label.id === d.id).style("visibility", "visible");
+                link.style("stroke-opacity", l => l.source.id === d.id || l.target.id === d.id ? 1 : 0);
             }).on("mouseout", function (event, d) {
                 d3.select(this).attr("stroke", null);
                 labels.filter(label => label.id === d.id).style("visibility", "hidden");
+                link.style("stroke-opacity", 0);
             });
 
-            // Update simulation
             simulation.on("tick", () => {
                 link.attr("x1", d => d.source.x)
                     .attr("y1", d => d.source.y)
@@ -90,11 +84,11 @@
                       .attr("y", d => d.y);
             });
 
-node.on("click", (event, d) => {
-    console.log("🌐 Navigating to:", d.route);
-    window.location.href = d.route;
-});
-            // Dragging behavior
+            node.on("click", (event, d) => {
+                console.log("🌐 Navigating to:", d.route);
+                window.location.href = d.route;
+            });
+
             function drag(simulation) {
                 function dragstarted(event, d) {
                     if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -117,3 +111,4 @@ node.on("click", (event, d) => {
     </script>
 </body>
 </html>
+
